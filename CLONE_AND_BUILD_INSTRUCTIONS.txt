@@ -1,0 +1,287 @@
+===============================================================================
+MOOS-IvP REPOSITORY - CLONE AND BUILD INSTRUCTIONS
+===============================================================================
+Repository: https://github.com/NDValla-GWU/moos-ivp
+Branch: main (with build fixes applied)
+Date: September 1, 2025
+
+===============================================================================
+SYSTEM REQUIREMENTS
+===============================================================================
+
+Operating System:
+- Ubuntu 18.04+ / Debian 9+ (recommended)
+- CentOS 7+ / RHEL 7+
+- macOS 10.14+ (with Xcode command line tools)
+
+Hardware Requirements:
+- 4GB+ RAM (8GB recommended for parallel builds)
+- 5GB+ free disk space
+- Multi-core processor (for faster builds)
+
+===============================================================================
+PREREQUISITE INSTALLATION
+===============================================================================
+
+AUTOMATED INSTALLATION (RECOMMENDED FOR LINUX):
+===============================================
+The repository includes an automated dependency installation script that supports
+multiple Linux distributions:
+
+./install-dependencies.sh                      # Full installation with GUI support
+./install-dependencies.sh --minimal            # Minimal installation for headless systems
+./install-dependencies.sh --dry-run            # Preview what would be installed
+./install-dependencies.sh --help               # Show all options and supported distributions
+
+Supported distributions: Ubuntu, Debian, CentOS, RHEL, Fedora, Arch Linux, openSUSE
+
+MANUAL INSTALLATION:
+===================
+If the automated script doesn't work for your system, use the manual commands below:
+
+Ubuntu/Debian:
+==============
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git subversion
+sudo apt-get install -y libfltk1.3-dev freeglut3-dev libpng-dev libjpeg-dev
+sudo apt-get install -y libxft-dev libxinerama-dev libxpm-dev 
+sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev
+
+CentOS/RHEL:
+===========
+sudo yum groupinstall "Development Tools"
+sudo yum install cmake git subversion
+sudo yum install fltk-devel mesa-libGL-devel mesa-libGLU-devel
+sudo yum install libpng-devel libjpeg-devel libXft-devel
+
+macOS:
+======
+# Install Xcode command line tools
+xcode-select --install
+
+# Install Homebrew (if not already installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install cmake git fltk
+
+===============================================================================
+CLONE AND BUILD PROCESS
+===============================================================================
+
+Step 1: Clone Repository
+========================
+git clone https://github.com/NDValla-GWU/moos-ivp.git
+cd moos-ivp
+
+Step 2: Install Dependencies and Verify Environment
+==================================================
+# Option A: Automated dependency installation (Linux only)
+./install-dependencies.sh                      # Install all dependencies automatically
+./install-dependencies.sh --dry-run            # Preview what would be installed first
+
+# Option B: Manual verification (all platforms)
+# Check required tools are installed
+which cmake    # Should return: /usr/bin/cmake (or similar)
+which make     # Should return: /usr/bin/make (or similar)  
+which g++      # Should return: /usr/bin/g++ (or similar)
+
+# Check versions
+cmake --version    # Should be 3.5.0 or higher
+g++ --version      # Should be 5.4.0 or higher
+
+Step 3: Build the System
+========================
+# Full build (recommended)
+./build.sh
+
+# Alternative build options:
+./build.sh --help              # Show all build options
+./build.sh --clean             # Remove previous build, then build
+./build.sh --minrobot          # Build minimal robot apps only (no GUI)
+
+# Individual component builds:
+./build-moos.sh                # Build MOOS components only
+./build-ivp.sh                 # Build IvP components only
+
+Step 4: Verify Build Success
+============================
+./build-check.sh
+
+Expected output:
+     Missing MOOS Libs: 
+     Missing MOOS Apps: 
+      Missing IvP Libs: 
+      Missing IvP Apps: 
+PASS
+
+Step 5: Test Key Applications
+============================
+# Test core MOOS database
+./bin/MOOSDB --help
+
+# Test process launcher
+./bin/pAntler --help
+
+# Test marine simulator (latest version)
+./bin/uSimMarineV23 --help
+
+# Test marine viewer (requires GUI)
+./bin/pMarineViewer --help
+
+# Test helm controller
+./bin/pHelmIvP --help
+
+===============================================================================
+BUILD TIME ESTIMATES
+===============================================================================
+
+System Type              | Initial Build | Clean Rebuild | Incremental
+--------------------------|---------------|---------------|-------------
+Modern Laptop (8+ cores) | 10-15 min     | 8-12 min      | 1-3 min
+Standard Desktop (4 cores)| 20-25 min     | 15-20 min     | 3-5 min
+Older System (2 cores)   | 35-45 min     | 30-40 min     | 5-10 min
+Virtual Machine          | 25-35 min     | 20-30 min     | 4-8 min
+
+Note: Times may vary based on system specifications and available memory.
+
+===============================================================================
+BUILD OUTPUT VERIFICATION
+===============================================================================
+
+Successful Build Indicators:
+============================
+✅ ./build-check.sh reports "PASS"
+✅ No "ERROR" messages in build output  
+✅ bin/ directory contains 110+ executable files
+✅ lib/ directory contains compiled libraries
+✅ Key applications respond to --help flag
+
+Key Executables to Verify:
+==========================
+Core MOOS:          bin/MOOSDB, bin/pAntler, bin/pLogger, bin/pShare
+Marine Simulation:  bin/uSimMarineV23, bin/pMarinePIDV22
+Visualization:      bin/pMarineViewer, bin/alogview, bin/geoview  
+Helm Control:       bin/pHelmIvP, bin/uHelmScope
+Log Analysis:       bin/aloghelm, bin/alogscan, bin/aloggrep
+Contact Management: bin/pContactMgrV20
+Utilities:          bin/bhv2graphviz, bin/gen_obstacles
+
+Directory Structure After Build:
+===============================
+moos-ivp/
+├── bin/                    # 110+ compiled executables
+├── lib/                    # Compiled libraries (.a, .so files)
+├── include/                # Header files for development
+├── build/                  # CMake build artifacts
+│   ├── MOOS/              # MOOS build files
+│   └── ivp/               # IvP build files
+├── MOOS -> MOOS_Jul0519/   # MOOS source (symlink)
+├── MOOS_Jul0519/          # MOOS source code
+├── ivp/                    # IvP source code
+│   ├── src/               # Application source
+│   ├── missions/          # Example missions  
+│   └── data/              # Sample data files
+├── scripts/                # Utility scripts
+├── moosdocs/              # Documentation
+└── BUILD_FIXES_*.txt       # Build fix documentation
+
+===============================================================================
+TROUBLESHOOTING
+===============================================================================
+
+Build Fails with "Command not found":
+=====================================
+Problem: Missing prerequisites
+Solution: 
+  1. Install build-essential (Ubuntu) or Development Tools (CentOS)
+  2. Install cmake and git packages
+  3. Verify PATH includes /usr/bin
+
+Build Fails with "No such file or directory":
+===========================================
+Problem: Missing development libraries
+Solution:
+  1. Install GUI development packages (fltk, OpenGL)
+  2. For headless systems, use: ./build.sh --minrobot
+
+Build Fails with "Permission denied":
+====================================
+Problem: Incorrect permissions or running as root
+Solution:
+  1. Don't run as root user
+  2. Check file permissions: chmod +x build.sh
+  3. Ensure user can write to current directory
+
+Build Extremely Slow:
+====================
+Problem: Limited resources or single-threaded build
+Solution:
+  1. Close unnecessary applications
+  2. Build uses automatic parallelization
+  3. For manual control: make -j4 (use 4 cores)
+
+GUI Applications Won't Start:
+============================
+Problem: Missing X11 libraries or no display
+Solution:
+  1. Install X11 development packages
+  2. Set DISPLAY environment variable
+  3. For headless: Use command-line tools only
+
+"Missing MOOS Apps" in build-check:
+==================================
+Problem: Partial build failure
+Solution:
+  1. Run: ./build.sh --clean && ./build.sh
+  2. Check specific error messages in build log
+  3. Verify all prerequisites installed
+
+===============================================================================
+NEXT STEPS AFTER SUCCESSFUL BUILD
+===============================================================================
+
+1. Explore Documentation:
+   ----------------------
+   - Read files in moosdocs/ directory
+   - Visit: https://oceanai.mit.edu/moos-ivp/
+   - Check README files in ivp/missions/
+
+2. Run Example Missions:
+   --------------------
+   cd ivp/missions/m2_berta/
+   ./launch.sh
+   
+3. Learn Key Applications:
+   ----------------------
+   - Start with simple MOOS database: ./bin/MOOSDB
+   - Try marine simulator: ./bin/uSimMarineV23
+   - Use mission launcher: ./bin/pAntler
+
+4. Development Setup:
+   -----------------
+   - Add bin/ directory to PATH for easier access
+   - Use scripts/ directory utilities
+   - Explore ivp/src/ for source code examples
+
+5. Community Resources:
+   -------------------
+   - MOOS-IvP mailing list
+   - MIT Ocean Engineering documentation
+   - GitHub issues for this repository
+
+===============================================================================
+SUPPORT AND CONTACT
+===============================================================================
+
+For build issues specific to this repository:
+- Create issue at: https://github.com/NDValla-GWU/moos-ivp/issues
+- Reference BUILD_FIXES_DOCUMENTATION.txt for known solutions
+
+For general MOOS-IvP support:
+- Visit: https://oceanai.mit.edu/moos-ivp/
+- Consult official documentation and tutorials
+
+Build fixes applied: September 1, 2025
+Repository tested on: Ubuntu 20.04, Ubuntu 22.04
+===============================================================================

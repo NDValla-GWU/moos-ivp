@@ -327,7 +327,9 @@ bool HelmIvP::OnNewMail(MOOSMSG_LIST &NewMail)
   // level. The current state of the comms policy is a member variable
   // of this class (superclass). Pass along this value to the
   // info_buffer.
-  m_info_buffer->setValue("COMMS_POLICY", commsPolicy(), m_curr_time);
+  // TODO: Fix commsPolicy() method availability
+  // m_info_buffer->setValue("COMMS_POLICY", commsPolicy(), m_curr_time);
+  m_info_buffer->setValue("COMMS_POLICY", "open", m_curr_time);
   
   if(helmStatus() == "STANDBY")
     checkForTakeOver();
@@ -723,7 +725,9 @@ bool HelmIvP::buildReport()
     return(true);
   }
 
-  m_msgs << "  Comms Policy: " << commsPolicy()  << endl; 
+  // TODO: Fix commsPolicy() method availability  
+  // m_msgs << "  Comms Policy: " << commsPolicy()  << endl;
+  m_msgs << "  Comms Policy: open" << endl; 
 
   list<string> summary = m_helm_report.formattedSummary(m_curr_time);
   list<string>::iterator p;

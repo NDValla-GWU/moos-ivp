@@ -69,7 +69,7 @@ echo "  SCRIPT_ABS_DIR: " ${SCRIPT_ABS_DIR}
 
 # Setup C and C++ Compiler flags for Mac and Linux. 
 MOOS_CXX_FLAGS="-Wall -Wextra -Wno-unused-parameter -pedantic -fPIC "
-MOOS_CXX_FLAGS="-Wno-c++11-extensions -Wno-deprecated-declarations "
+MOOS_CXX_FLAGS+=" -Wno-c++11-extensions -Wno-deprecated-declarations "
 # -Wno-psabi turns off warnings about ABI change between gcc 6 and 7.1
 CMAKE_CXX_FLAGS+="-Wno-psabi "
 
@@ -101,10 +101,13 @@ cmake -DENABLE_EXPORT=ON                                       \
       -DTIME_WARP_AGGLOMERATION_CONSTANT=0.4                   \
       -DCMAKE_BUILD_TYPE=${BUILD_TYPE}                         \
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${SCRIPT_ABS_DIR}/bin" \
+      -DCMAKE_INSTALL_PREFIX="${SCRIPT_ABS_DIR}"               \
       -DCMAKE_CXX_FLAGS="${MOOS_CXX_FLAGS}"                    \
       "${MOOS_SRC_DIR}/MOOSCore"                               \
   && echo "" && echo "Invoking make..." `pwd` && echo ""       \
-  && make  ${CMD_ARGS}
+  && make  ${CMD_ARGS}                                         \
+  && echo "" && echo "Installing MOOSCore..." && echo ""       \
+  && make install
 
 if [ $? -ne 0 ] ; then
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -123,9 +126,10 @@ cd "${BUILD_ABS_DIR}/MOOSEssentials"
 echo "Invoking cmake..." `pwd`
 cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE}                          \
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${SCRIPT_ABS_DIR}/bin"  \
+      -DCMAKE_PREFIX_PATH="${SCRIPT_ABS_DIR}"                   \
       -DCMAKE_CXX_FLAGS="${MOOS_CXX_FLAGS}"                     \
       "${MOOS_SRC_DIR}/MOOSEssentials"                          \
-  && echo"" && echo "Invoking make..." `pwd` && echo""          \
+  && echo "" && echo "Invoking make..." `pwd` && echo ""        \
   && make ${CMD_ARGS}
 
 if [ $? -ne 0 ] ; then

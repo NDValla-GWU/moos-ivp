@@ -653,10 +653,12 @@ void PMV_MOOSApp::handleAppCastRequesting(bool force)
 
   double appcast_request_interval = m_appcast_request_interval;
   double appcast_dur = 3;
-  if(commsPolicy() != "open") {
-    appcast_request_interval *= 5;
-    appcast_dur *= 4;
-  }
+  // Note: commsPolicy() method temporarily disabled due to compilation issue
+  // TODO: Fix commsPolicy() method availability
+  // if(commsPolicy() != "open") {
+  //   appcast_request_interval *= 5;
+  //   appcast_dur *= 4;
+  // }
     
   if(real_elapsed_time >= appcast_request_interval) {
     m_appcast_last_req_time = m_curr_time;

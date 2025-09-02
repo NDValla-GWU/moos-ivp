@@ -94,8 +94,7 @@ MarinePID::MarinePID()
   m_reset_dep_i_new_desired = false;
   m_reset_pch_i_new_desired = false;
 
-  // This app is deprecated. Suggest an alternative
-  m_deprecated_alt = "pMarinePIDV22";
+  // This app is deprecated. Use pMarinePIDV22 instead
 }
 
 //--------------------------------------------------------------------
