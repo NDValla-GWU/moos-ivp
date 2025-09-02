@@ -151,11 +151,11 @@ BUILD OUTPUT VERIFICATION
 
 Successful Build Indicators:
 ============================
-✅ ./build-check.sh reports "PASS"
-✅ No "ERROR" messages in build output  
-✅ bin/ directory contains 110+ executable files
-✅ lib/ directory contains compiled libraries
-✅ Key applications respond to --help flag
+- ./build-check.sh reports "PASS"
+- No "ERROR" messages in build output  
+- bin/ directory contains 110+ executable files
+- lib/ directory contains compiled libraries
+- Key applications respond to --help flag
 
 Key Executables to Verify:
 ==========================

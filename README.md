@@ -1,6 +1,48 @@
 # MOOS-IvP
 
+[![Build Status](https://github.com/NDValla-GWU/moos-ivp/workflows/MOOS-IvP%20Build%20and%20Test/badge.svg)](https://github.com/NDValla-GWU/moos-ivp/actions)
+[![Quick CI](https://github.com/NDValla-GWU/moos-ivp/workflows/Quick%20CI/badge.svg)](https://github.com/NDValla-GWU/moos-ivp/actions)
+
 [MOOS-IvP](https://moos-ivp.org/) is a set of open source C++ modules for providing autonomy on robotic platforms, in particular autonomous marine vehicles.
+
+## Quick Start
+
+### Automated Installation (Recommended)
+```bash
+# Clone repository
+git clone https://github.com/NDValla-GWU/moos-ivp.git
+cd moos-ivp
+
+# Install dependencies automatically (Linux)
+./install-dependencies.sh
+
+# Build everything
+./build.sh
+
+# Verify build
+./build-check.sh
+```
+
+### Manual Installation
+See [CLONE_AND_BUILD_INSTRUCTIONS.txt](./CLONE_AND_BUILD_INSTRUCTIONS.txt) for detailed setup instructions.
+
+## Build Status and Automation
+
+This repository includes automated CI/CD workflows that:
+- **Multi-Platform Builds**: Ubuntu 20.04, 22.04, Rocky Linux 8
+- **Automated Testing**: Build verification and unit tests
+- **Dependency Management**: Weekly compatibility checks
+- **Security Scanning**: Vulnerability detection
+- **Release Automation**: Automatic package generation
+
+See [.github/workflows/README.md](./.github/workflows/README.md) for detailed CI/CD documentation.
+
+## Documentation
+
+- **Quick Reference**: [BUILD_FIXES_SUMMARY.txt](./BUILD_FIXES_SUMMARY.txt)
+- **Complete Setup Guide**: [CLONE_AND_BUILD_INSTRUCTIONS.txt](./CLONE_AND_BUILD_INSTRUCTIONS.txt)
+- **Technical Details**: [BUILD_FIXES_DOCUMENTATION.txt](./BUILD_FIXES_DOCUMENTATION.txt)
+- **CI/CD Information**: [.github/workflows/README.md](./.github/workflows/README.md)
 
 ## Project Objectives and Philosophy
 

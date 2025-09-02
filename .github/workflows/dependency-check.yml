@@ -1,0 +1,132 @@
+name: Dependency Update Check
+
+# Weekly check for dependency updates and compatibility
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
+  workflow_dispatch:     # Allow manual triggering
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version: [20.04, 22.04, 24.04]
+        
+    name: Check Dependencies - Ubuntu ${{ matrix.ubuntu-version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies and check versions
+      run: |
+        echo "=== Ubuntu ${{ matrix.ubuntu-version }} Dependency Check ==="
+        
+        # Update package lists
+        sudo apt-get update
+        
+        # Install dependencies using our script
+        chmod +x ./install-dependencies.sh
+        sudo ./install-dependencies.sh --yes --verbose
+        
+        # Check versions of key dependencies
+        echo "=== Dependency Versions ==="
+        echo "CMake: $(cmake --version | head -1)"
+        echo "GCC: $(gcc --version | head -1)"
+        echo "G++: $(g++ --version | head -1)"
+        
+        # Check FLTK
+        if pkg-config --exists fltk; then
+          echo "FLTK: $(pkg-config --modversion fltk)"
+        else
+          echo "FLTK: Not found via pkg-config"
+        fi
+        
+        # Check OpenGL
+        if pkg-config --exists gl; then
+          echo "OpenGL: $(pkg-config --modversion gl)"
+        else
+          echo "OpenGL: Not found via pkg-config"
+        fi
+        
+        # List all relevant packages and versions
+        echo "=== All Installed Package Versions ==="
+        dpkg -l | grep -E "(cmake|fltk|mesa|build-essential)" || true
+        
+    - name: Test build with current dependencies
+      run: |
+        echo "=== Testing build compatibility ==="
+        ./build.sh --help
+        
+        # Try a minimal build to check compatibility
+        echo "=== Attempting minimal build ==="
+        timeout 300 ./build.sh --minrobot || echo "Build timed out or failed"
+        
+    - name: Generate dependency report
+      run: |
+        echo "=== Generating Dependency Report ==="
+        cat > dependency-report-ubuntu-${{ matrix.ubuntu-version }}.txt << EOF
+        # MOOS-IvP Dependency Report
+        Date: $(date)
+        Ubuntu Version: ${{ matrix.ubuntu-version }}
+        
+        ## System Information
+        $(uname -a)
+        
+        ## Package Versions
+        $(dpkg -l | grep -E "(cmake|fltk|mesa|build-essential|git|subversion)")
+        
+        ## Dependency Script Test
+        $(./install-dependencies.sh --dry-run)
+        EOF
+        
+    - name: Upload dependency report
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-report-ubuntu-${{ matrix.ubuntu-version }}
+        path: dependency-report-ubuntu-${{ matrix.ubuntu-version }}.txt
+        retention-days: 30
+        
+  create-issue-on-failure:
+    if: failure()
+    needs: check-dependencies
+    runs-on: ubuntu-latest
+    name: Create Issue on Dependency Failure
+    
+    steps:
+    - name: Create issue
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: 'Dependency Update Check Failed',
+            body: `
+            ## Dependency Check Failure
+            
+            The weekly dependency update check has failed.
+            
+            **Workflow**: ${context.workflow}
+            **Run ID**: ${context.runId}
+            **Date**: ${new Date().toISOString()}
+            
+            ### Possible Issues:
+            - New package versions may be incompatible
+            - Package names may have changed
+            - Repository sources may be unavailable
+            - Build scripts may need updates
+            
+            ### Next Steps:
+            1. Review the workflow logs
+            2. Check if dependencies need version pinning
+            3. Update install-dependencies.sh if needed
+            4. Test manually on affected platforms
+            
+            ### Links:
+            - [Failed Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            - [install-dependencies.sh](${context.payload.repository.html_url}/blob/main/install-dependencies.sh)
+            `,
+            labels: ['dependencies', 'ci-failure', 'needs-investigation']
+          })

@@ -1,0 +1,484 @@
+name: Enhanced Static Analysis and Security
+
+# Comprehensive code quality, security, and compliance checking
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Code Quality and Linting
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality and Linting
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+        
+    - name: Install analysis tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cppcheck \
+          clang-format \
+          clang-tidy \
+          iwyu \
+          valgrind \
+          vera++ \
+          uncrustify \
+          doxygen \
+          graphviz \
+          lizard
+          
+    - name: Install additional linting tools
+      run: |
+        # Install cpplint for Google C++ style guide
+        pip install cpplint
+        
+        # Install PC-lint (if available) alternative - flawfinder
+        pip install flawfinder
+        
+        # Install shellcheck for shell script linting
+        sudo apt-get install -y shellcheck
+        
+        # Install yamllint for YAML files
+        pip install yamllint
+        
+        # Install markdownlint for markdown files
+        npm install -g markdownlint-cli
+        
+    - name: Run cppcheck static analysis
+      run: |
+        echo "=== Running cppcheck static analysis ==="
+        mkdir -p analysis-results
+        cppcheck \
+          --enable=all \
+          --std=c++11 \
+          --platform=unix64 \
+          --xml \
+          --xml-version=2 \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --suppress=unmatchedSuppression \
+          --inline-suppr \
+          --inconclusive \
+          --force \
+          ivp/src/ MOOS/ 2> analysis-results/cppcheck-results.xml || true
+          
+        # Generate human-readable report
+        cppcheck \
+          --enable=all \
+          --std=c++11 \
+          --platform=unix64 \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --template='{file}:{line}: {severity}: {message} [{id}]' \
+          ivp/src/ MOOS/ > analysis-results/cppcheck-report.txt 2>&1 || true
+          
+    - name: Run clang-tidy analysis
+      run: |
+        echo "=== Running clang-tidy analysis ==="
+        # Find all C++ files and run clang-tidy
+        find ivp/src -name "*.cpp" -o -name "*.cxx" | head -20 | while read file; do
+          echo "Analyzing: $file"
+          clang-tidy "$file" \
+            -checks='-*,readability-*,performance-*,bugprone-*,modernize-*' \
+            -- -std=c++11 -I./ivp/src -I./MOOS 2>&1 | \
+            tee -a analysis-results/clang-tidy-results.txt || true
+        done
+        
+    - name: Run Google C++ style check (cpplint)
+      run: |
+        echo "=== Running Google C++ style check ==="
+        find ivp/src -name "*.cpp" -o -name "*.h" | head -50 | \
+          xargs cpplint --filter=-whitespace/tab,-build/include_order \
+          > analysis-results/cpplint-results.txt 2>&1 || true
+          
+    - name: Run flawfinder security analysis
+      run: |
+        echo "=== Running flawfinder security analysis ==="
+        flawfinder --html --context ivp/src/ MOOS/ \
+          > analysis-results/flawfinder-report.html 2>&1 || true
+        flawfinder --quiet --dataonly ivp/src/ MOOS/ \
+          > analysis-results/flawfinder-data.txt 2>&1 || true
+          
+    - name: Check code formatting with clang-format
+      run: |
+        echo "=== Checking code formatting ==="
+        find ivp/src -name "*.cpp" -o -name "*.h" | head -20 | while read file; do
+          echo "Checking format: $file"
+          clang-format --dry-run --Werror --style=Google "$file" 2>&1 | \
+            tee -a analysis-results/format-check-results.txt || true
+        done
+        
+    - name: Run complexity analysis with lizard
+      run: |
+        echo "=== Running complexity analysis ==="
+        lizard ivp/src/ --xml > analysis-results/complexity-results.xml || true
+        lizard ivp/src/ -l cpp -w > analysis-results/complexity-report.txt || true
+        
+    - name: Check shell scripts with shellcheck
+      run: |
+        echo "=== Checking shell scripts ==="
+        find . -name "*.sh" -type f | while read script; do
+          echo "Checking: $script"
+          shellcheck "$script" -f gcc >> analysis-results/shellcheck-results.txt 2>&1 || true
+        done
+        
+    - name: Check YAML files
+      run: |
+        echo "=== Checking YAML files ==="
+        find . -name "*.yml" -o -name "*.yaml" | \
+          xargs yamllint -f parsable > analysis-results/yaml-lint-results.txt 2>&1 || true
+          
+    - name: Check Markdown files
+      run: |
+        echo "=== Checking Markdown files ==="
+        find . -name "*.md" | \
+          xargs markdownlint > analysis-results/markdown-lint-results.txt 2>&1 || true
+          
+    - name: Generate analysis summary
+      run: |
+        echo "=== Generating analysis summary ==="
+        cat > analysis-results/analysis-summary.txt << EOF
+        # Static Analysis Summary
+        Date: $(date)
+        Repository: ${{ github.repository }}
+        Commit: ${{ github.sha }}
+        
+        ## Analysis Tools Run:
+        - cppcheck: C++ static analysis
+        - clang-tidy: C++ linting and modernization
+        - cpplint: Google C++ style guide compliance
+        - flawfinder: Security vulnerability detection
+        - clang-format: Code formatting verification
+        - lizard: Complexity analysis
+        - shellcheck: Shell script linting
+        - yamllint: YAML file validation
+        - markdownlint: Markdown file formatting
+        
+        ## Results Location:
+        $(ls -la analysis-results/)
+        
+        ## Summary Statistics:
+        cppcheck issues: $(grep -c "error\|warning" analysis-results/cppcheck-report.txt 2>/dev/null || echo "0")
+        clang-tidy issues: $(grep -c "warning\|error" analysis-results/clang-tidy-results.txt 2>/dev/null || echo "0")
+        cpplint issues: $(grep -c "error\|warning" analysis-results/cpplint-results.txt 2>/dev/null || echo "0")
+        flawfinder issues: $(grep -c "Hits = " analysis-results/flawfinder-data.txt 2>/dev/null || echo "0")
+        shell script issues: $(grep -c "error\|warning" analysis-results/shellcheck-results.txt 2>/dev/null || echo "0")
+        EOF
+        
+    - name: Upload analysis results
+      uses: actions/upload-artifact@v3
+      with:
+        name: static-analysis-results
+        path: analysis-results/
+        retention-days: 30
+
+  # Job 2: Secrets Detection and Security
+  secrets-and-security:
+    runs-on: ubuntu-latest
+    name: Secrets Detection and Security Scanning
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for secrets scanning
+        
+    - name: Install security tools
+      run: |
+        # Install gitleaks for secret detection
+        wget -O gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.18.0_linux_x64.tar.gz
+        tar -xzf gitleaks.tar.gz
+        sudo mv gitleaks /usr/local/bin/
+        
+        # Install trufflehog for secrets detection
+        wget -O trufflehog.tar.gz https://github.com/trufflesecurity/trufflehog/releases/latest/download/trufflehog_3.63.2_linux_amd64.tar.gz
+        tar -xzf trufflehog.tar.gz
+        sudo mv trufflehog /usr/local/bin/
+        
+        # Install semgrep for SAST
+        pip install semgrep
+        
+    - name: Run gitleaks secret detection
+      run: |
+        echo "=== Running gitleaks secret detection ==="
+        mkdir -p security-results
+        gitleaks detect --source . \
+          --report-format json \
+          --report-path security-results/gitleaks-report.json \
+          --verbose || true
+        gitleaks detect --source . \
+          --report-format csv \
+          --report-path security-results/gitleaks-report.csv || true
+          
+    - name: Run trufflehog secret detection
+      run: |
+        echo "=== Running trufflehog secret detection ==="
+        trufflehog filesystem . \
+          --json > security-results/trufflehog-report.json 2>&1 || true
+          
+    - name: Run semgrep SAST
+      run: |
+        echo "=== Running semgrep SAST ==="
+        semgrep \
+          --config=auto \
+          --json \
+          --output=security-results/semgrep-results.json \
+          . || true
+        semgrep \
+          --config=auto \
+          --text \
+          --output=security-results/semgrep-results.txt \
+          . || true
+          
+    - name: Run Trivy filesystem scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'json'
+        output: 'security-results/trivy-fs-results.json'
+        
+    - name: Run Trivy configuration scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'config'
+        scan-ref: '.'
+        format: 'json'
+        output: 'security-results/trivy-config-results.json'
+        
+    - name: Check for hardcoded credentials patterns
+      run: |
+        echo "=== Checking for hardcoded credentials ==="
+        # Custom patterns for common credential types
+        grep -r -n -i \
+          -e "password\s*=" \
+          -e "passwd\s*=" \
+          -e "api_key\s*=" \
+          -e "secret\s*=" \
+          -e "token\s*=" \
+          -e "access_key" \
+          -e "private_key" \
+          . \
+          --include="*.cpp" --include="*.h" --include="*.sh" --include="*.py" \
+          > security-results/credential-patterns.txt 2>&1 || true
+          
+    - name: Check file permissions
+      run: |
+        echo "=== Checking file permissions ==="
+        find . -type f \( -perm -4000 -o -perm -2000 \) \
+          > security-results/setuid-files.txt 2>&1 || true
+        find . -type f -perm -o+w \
+          > security-results/world-writable-files.txt 2>&1 || true
+          
+    - name: Generate security summary
+      run: |
+        echo "=== Generating security summary ==="
+        cat > security-results/security-summary.txt << EOF
+        # Security Analysis Summary
+        Date: $(date)
+        Repository: ${{ github.repository }}
+        Commit: ${{ github.sha }}
+        
+        ## Security Tools Run:
+        - gitleaks: Git repository secret detection
+        - trufflehog: Comprehensive secret scanning
+        - semgrep: Static Application Security Testing (SAST)
+        - trivy: Vulnerability and misconfiguration scanning
+        - Custom credential pattern matching
+        - File permission checking
+        
+        ## Results Summary:
+        Gitleaks findings: $(jq length security-results/gitleaks-report.json 2>/dev/null || echo "0")
+        Trufflehog findings: $(grep -c "SourceMetadata" security-results/trufflehog-report.json 2>/dev/null || echo "0")
+        Semgrep findings: $(jq '.results | length' security-results/semgrep-results.json 2>/dev/null || echo "0")
+        Trivy filesystem findings: $(jq '.Results | length' security-results/trivy-fs-results.json 2>/dev/null || echo "0")
+        Trivy config findings: $(jq '.Results | length' security-results/trivy-config-results.json 2>/dev/null || echo "0")
+        Credential patterns: $(wc -l < security-results/credential-patterns.txt 2>/dev/null || echo "0")
+        SUID files: $(wc -l < security-results/setuid-files.txt 2>/dev/null || echo "0")
+        World-writable files: $(wc -l < security-results/world-writable-files.txt 2>/dev/null || echo "0")
+        EOF
+        
+    - name: Upload security results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: security-results/
+        retention-days: 30
+        
+    - name: Upload SARIF results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'security-results/trivy-fs-results.json'
+
+  # Job 3: Dependency and License Checking
+  dependency-analysis:
+    runs-on: ubuntu-latest
+    name: Dependency and License Analysis
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install dependency analysis tools
+      run: |
+        # Install license checker tools
+        pip install licensecheck
+        npm install -g license-checker
+        
+        # Install FOSSA CLI (if available)
+        # wget -O fossa.tar.gz https://github.com/fossas/fossa-cli/releases/latest/download/fossa_3.8.13_linux_amd64.tar.gz
+        # tar -xzf fossa.tar.gz && sudo mv fossa /usr/local/bin/
+        
+    - name: Analyze system dependencies
+      run: |
+        echo "=== Analyzing system dependencies ==="
+        mkdir -p dependency-results
+        
+        # Check what our install script installs
+        ./install-dependencies.sh --dry-run --verbose > dependency-results/system-deps.txt 2>&1 || true
+        
+        # List current system packages
+        dpkg -l > dependency-results/current-packages.txt 2>&1 || true
+        
+    - name: Check for vulnerable dependencies
+      run: |
+        echo "=== Checking for vulnerable dependencies ==="
+        # Use trivy to scan for known vulnerabilities in installed packages
+        trivy fs --format json --output dependency-results/trivy-deps.json . || true
+        
+    - name: License compliance check
+      run: |
+        echo "=== Running license compliance check ==="
+        # Check source code for license headers
+        find ivp/src -name "*.cpp" -o -name "*.h" | head -20 | while read file; do
+          echo "=== $file ===" >> dependency-results/license-headers.txt
+          head -20 "$file" | grep -i -E "(license|copyright|gpl|mit|bsd)" >> dependency-results/license-headers.txt 2>&1 || true
+        done
+        
+    - name: Generate dependency report
+      run: |
+        echo "=== Generating dependency report ==="
+        cat > dependency-results/dependency-summary.txt << EOF
+        # Dependency Analysis Summary
+        Date: $(date)
+        Repository: ${{ github.repository }}
+        
+        ## System Dependencies:
+        See system-deps.txt for complete list
+        
+        ## License Compliance:
+        See license-headers.txt for source file license analysis
+        
+        ## Security Vulnerabilities:
+        See trivy-deps.json for vulnerability scan results
+        
+        ## Package Information:
+        Current system packages: $(wc -l < dependency-results/current-packages.txt)
+        License headers found: $(grep -c "license\|copyright\|gpl\|mit\|bsd" dependency-results/license-headers.txt 2>/dev/null || echo "0")
+        EOF
+        
+    - name: Upload dependency results
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-analysis-results
+        path: dependency-results/
+        retention-days: 30
+
+  # Job 4: Create comprehensive report
+  generate-report:
+    needs: [code-quality, secrets-and-security, dependency-analysis]
+    runs-on: ubuntu-latest
+    name: Generate Comprehensive Analysis Report
+    
+    steps:
+    - name: Download all analysis results
+      uses: actions/download-artifact@v3
+      
+    - name: Generate comprehensive report
+      run: |
+        echo "=== Generating comprehensive analysis report ==="
+        mkdir -p comprehensive-report
+        
+        cat > comprehensive-report/ANALYSIS_REPORT.md << 'EOF'
+        # MOOS-IvP Comprehensive Analysis Report
+        
+        Generated: $(date)
+        Repository: ${{ github.repository }}
+        Commit: ${{ github.sha }}
+        Workflow: ${{ github.workflow }}
+        
+        ## Executive Summary
+        
+        This report contains the results of comprehensive static analysis, security scanning,
+        and dependency analysis performed on the MOOS-IvP codebase.
+        
+        ## Analysis Categories
+        
+        ### 1. Code Quality Analysis
+        - **cppcheck**: Static analysis for C++ code
+        - **clang-tidy**: Modern C++ linting and suggestions
+        - **cpplint**: Google C++ style guide compliance
+        - **lizard**: Complexity analysis
+        - **clang-format**: Code formatting consistency
+        
+        ### 2. Security Analysis
+        - **gitleaks**: Git repository secret detection
+        - **trufflehog**: Comprehensive secret scanning
+        - **semgrep**: Static Application Security Testing (SAST)
+        - **trivy**: Vulnerability and misconfiguration scanning
+        - **Custom patterns**: Hardcoded credential detection
+        
+        ### 3. Infrastructure Analysis
+        - **shellcheck**: Shell script quality
+        - **yamllint**: YAML file validation
+        - **markdownlint**: Documentation quality
+        
+        ### 4. Dependency Analysis
+        - **License compliance**: Source code license verification
+        - **Vulnerability scanning**: Known security issues
+        - **System dependencies**: Package analysis
+        
+        ## Detailed Results
+        
+        Detailed results for each analysis category are available in the respective artifact downloads:
+        - `static-analysis-results`
+        - `security-scan-results`
+        - `dependency-analysis-results`
+        
+        ## Recommendations
+        
+        1. **High Priority**: Address any security vulnerabilities found
+        2. **Medium Priority**: Fix code quality issues that affect maintainability
+        3. **Low Priority**: Improve code formatting consistency
+        
+        ## Next Steps
+        
+        1. Review all findings in the detailed reports
+        2. Create issues for significant problems
+        3. Implement fixes for critical security issues
+        4. Update coding standards based on analysis results
+        
+        EOF
+        
+        # Copy summary files to comprehensive report
+        cp static-analysis-results/analysis-summary.txt comprehensive-report/ 2>/dev/null || true
+        cp security-scan-results/security-summary.txt comprehensive-report/ 2>/dev/null || true
+        cp dependency-analysis-results/dependency-summary.txt comprehensive-report/ 2>/dev/null || true
+        
+    - name: Upload comprehensive report
+      uses: actions/upload-artifact@v3
+      with:
+        name: comprehensive-analysis-report
+        path: comprehensive-report/
+        retention-days: 60

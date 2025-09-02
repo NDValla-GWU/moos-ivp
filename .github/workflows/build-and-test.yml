@@ -1,0 +1,266 @@
+name: MOOS-IvP Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  # Job 1: Build and test on Ubuntu (primary platform)
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version: [20.04, 22.04]
+        build-type: [Release, Debug]
+    
+    name: Ubuntu ${{ matrix.ubuntu-version }} - ${{ matrix.build-type }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Set up environment
+      run: |
+        echo "MOOS_IVP_ROOT=${{ github.workspace }}" >> $GITHUB_ENV
+        echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        # Make the install script executable and run it
+        chmod +x ./install-dependencies.sh
+        sudo ./install-dependencies.sh --yes --verbose
+    
+    - name: Verify dependencies
+      run: |
+        echo "=== Checking installed dependencies ==="
+        cmake --version
+        g++ --version
+        pkg-config --exists fltk || echo "FLTK not found via pkg-config"
+        
+    - name: Build MOOS components
+      run: |
+        echo "=== Building MOOS components ==="
+        ./build-moos.sh
+        
+    - name: Build IvP components  
+      run: |
+        echo "=== Building IvP components ==="
+        ./build-ivp.sh
+        
+    - name: Run build verification
+      run: |
+        echo "=== Running build verification ==="
+        ./build-check.sh
+        
+    - name: Test key executables
+      run: |
+        echo "=== Testing key executables ==="
+        ./bin/MOOSDB --help
+        ./bin/pAntler --help
+        ./bin/uSimMarineV23 --help
+        ./bin/pMarineViewer --help || echo "pMarineViewer requires GUI (expected failure in CI)"
+        
+    - name: Run unit tests (if available)
+      run: |
+        echo "=== Running unit tests ==="
+        if [ -x "./build-utests.sh" ]; then
+          ./build-utests.sh
+        else
+          echo "No unit tests script found"
+        fi
+        
+    - name: Package build artifacts
+      if: matrix.build-type == 'Release' && matrix.ubuntu-version == '22.04'
+      run: |
+        echo "=== Packaging build artifacts ==="
+        mkdir -p artifacts
+        cp -r bin artifacts/
+        cp -r lib artifacts/
+        cp -r include artifacts/
+        cp BUILD_FIXES_SUMMARY.txt artifacts/
+        cp CLONE_AND_BUILD_INSTRUCTIONS.txt artifacts/
+        tar -czf moos-ivp-ubuntu-${{ matrix.ubuntu-version }}.tar.gz artifacts/
+        
+    - name: Upload build artifacts
+      if: matrix.build-type == 'Release' && matrix.ubuntu-version == '22.04'
+      uses: actions/upload-artifact@v3
+      with:
+        name: moos-ivp-ubuntu-${{ matrix.ubuntu-version }}
+        path: moos-ivp-ubuntu-${{ matrix.ubuntu-version }}.tar.gz
+        retention-days: 30
+
+  # Job 2: Build on CentOS/Rocky Linux (alternative platform)
+  build-centos:
+    runs-on: ubuntu-latest
+    container:
+      image: rockylinux:8
+    
+    name: Rocky Linux 8
+    
+    steps:
+    - name: Install Git and basic tools
+      run: |
+        dnf update -y
+        dnf install -y git sudo
+        
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        chmod +x ./install-dependencies.sh
+        ./install-dependencies.sh --yes --verbose --force-distro centos
+        
+    - name: Build MOOS-IvP
+      run: |
+        export PATH=$PATH:$(pwd)/bin
+        ./build.sh
+        
+    - name: Verify build
+      run: |
+        ./build-check.sh
+
+  # Job 3: Basic static analysis (comprehensive analysis in separate workflow)
+  basic-analysis:
+    runs-on: ubuntu-latest
+    name: Basic Code Analysis
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install basic analysis tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz cppcheck clang-format shellcheck
+        
+    - name: Run basic cppcheck
+      run: |
+        echo "=== Running basic static analysis ==="
+        mkdir -p analysis-results
+        cppcheck --enable=warning,error --xml --xml-version=2 \
+          --suppress=missingIncludeSystem \
+          ivp/src/ 2> analysis-results/cppcheck-basic.xml || true
+          
+    - name: Check critical shell scripts
+      run: |
+        echo "=== Checking critical shell scripts ==="
+        shellcheck build.sh build-moos.sh build-ivp.sh install-dependencies.sh \
+          > analysis-results/shellcheck-basic.txt 2>&1 || true
+          
+    - name: Check basic code formatting
+      run: |
+        echo "=== Basic format check on key files ==="
+        find ivp/src -name "*.cpp" -o -name "*.h" | head -10 | \
+          xargs clang-format --dry-run --style=Google 2>&1 | \
+          tee analysis-results/format-basic.txt || true
+          
+    - name: Generate documentation (if Doxyfile exists)
+      run: |
+        echo "=== Generating documentation ==="
+        if [ -f "Doxyfile" ]; then
+          doxygen Doxyfile
+        else
+          echo "No Doxyfile found, skipping documentation generation"
+        fi
+        
+    - name: Upload basic analysis results
+      uses: actions/upload-artifact@v3
+      with:
+        name: basic-analysis-results
+        path: analysis-results/
+        retention-days: 14
+
+  # Job 4: Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Job 5: Create release (only on tags)
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-ubuntu, build-centos]
+    runs-on: ubuntu-latest
+    name: Create Release
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: moos-ivp-ubuntu-22.04
+        
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: MOOS-IvP Release ${{ github.ref }}
+        body: |
+          ## MOOS-IvP Release
+          
+          This release includes:
+          - All build fixes applied for MOOSEssentials compatibility
+          - Fixed commsPolicy() method issues in pMarineViewer and pHelmIvP
+          - Restored deprecated applications (uSimMarine variants)
+          - Automated dependency installation script
+          - Comprehensive build documentation
+          
+          ### Installation:
+          1. Download the artifact for your platform
+          2. Extract: `tar -xzf moos-ivp-ubuntu-22.04.tar.gz`
+          3. Add to PATH: `export PATH=$PATH:$(pwd)/artifacts/bin`
+          
+          ### Build from Source:
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd moos-ivp
+          ./install-dependencies.sh
+          ./build.sh
+          ```
+          
+          See CLONE_AND_BUILD_INSTRUCTIONS.txt for detailed setup guide.
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./moos-ivp-ubuntu-22.04.tar.gz
+        asset_name: moos-ivp-ubuntu-22.04.tar.gz
+        asset_content_type: application/gzip

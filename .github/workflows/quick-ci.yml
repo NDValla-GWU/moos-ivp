@@ -1,0 +1,51 @@
+name: Quick CI
+
+# Lightweight CI for faster feedback on common development scenarios
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quick-build:
+    runs-on: ubuntu-22.04
+    name: Quick Build Check
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.apt
+          /var/cache/apt
+        key: ${{ runner.os }}-apt-${{ hashFiles('install-dependencies.sh') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-
+          
+    - name: Install dependencies
+      run: |
+        chmod +x ./install-dependencies.sh
+        sudo ./install-dependencies.sh --yes
+        
+    - name: Quick build test
+      run: |
+        echo "=== Testing build scripts ==="
+        ./build-moos.sh --help
+        ./build-ivp.sh --help
+        ./build.sh --help
+        
+    - name: Verify dependency script
+      run: |
+        echo "=== Testing dependency script ==="
+        ./install-dependencies.sh --dry-run --verbose
+        
+    - name: Check documentation files
+      run: |
+        echo "=== Verifying documentation ==="
+        [ -f "BUILD_FIXES_SUMMARY.txt" ] && echo "✓ BUILD_FIXES_SUMMARY.txt exists"
+        [ -f "CLONE_AND_BUILD_INSTRUCTIONS.txt" ] && echo "✓ CLONE_AND_BUILD_INSTRUCTIONS.txt exists"
+        [ -f "BUILD_FIXES_DOCUMENTATION.txt" ] && echo "✓ BUILD_FIXES_DOCUMENTATION.txt exists"
